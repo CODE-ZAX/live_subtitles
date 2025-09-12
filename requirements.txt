@@ -1,0 +1,7 @@
+numpy
+opencv-python
+pydub
+SpeechRecognition
+moviepy
+srt
+openai-whisper
