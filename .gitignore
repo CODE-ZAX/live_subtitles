@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.mp4
+*.srt
+*.wav
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+
+
+*.srt
