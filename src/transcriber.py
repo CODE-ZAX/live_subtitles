@@ -1,6 +1,6 @@
 import os
 import tempfile
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 import whisper
 
 class Transcriber:
@@ -13,11 +13,11 @@ class Transcriber:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
             audio_path = temp_audio.name
         video = VideoFileClip(self.video_path)
-        video.audio.write_audiofile(audio_path, verbose=False, logger=None)
+        video.audio.write_audiofile(audio_path)
 
-        # Load Whisper model and transcribe
+        # Load Whisper model and transcribe with word-level timestamps
         model = whisper.load_model("base")
-        result = model.transcribe(audio_path, verbose=False)
+        result = model.transcribe(audio_path, verbose=False, word_timestamps=True)
         self.transcribed_segments = result['segments']
 
         # Clean up temp audio file

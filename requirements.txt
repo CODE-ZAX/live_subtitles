@@ -2,6 +2,6 @@ numpy
 opencv-python
 pydub
 SpeechRecognition
-moviepy
+moviepy>=2.0.0
 srt
 openai-whisper
