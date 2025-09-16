@@ -17,8 +17,14 @@ class SubtitleGenerator:
                             word = word_info['word'].strip()
                             if word:  # Only process non-empty words
                                 start_time = max(0, word_info['start'])
-                                # Keep original word timing but ensure minimum duration
-                                end_time = max(start_time + 0.5, word_info['end'])
+                                # Optimize timing for smooth captions
+                                original_duration = word_info['end'] - start_time
+                                
+                                # For fast speech, use shorter durations
+                                if original_duration < 0.3:
+                                    end_time = start_time + max(0.2, original_duration)
+                                else:
+                                    end_time = word_info['end']
                                 
                                 start_formatted = self.format_time(start_time)
                                 end_formatted = self.format_time(end_time)

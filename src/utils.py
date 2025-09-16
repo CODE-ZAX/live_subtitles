@@ -47,9 +47,9 @@ def create_dynamic_text_function(word_events):
 
 def create_rolling_word_clips(word_subtitles, video, font_size, font, color, highlight_color, bottom_padding, original_width, original_height):
     """
-    Create a single dynamic text clip with no overlaps
+    Create smooth live caption style rolling word clips
     """
-    print("Creating live rolling word clip...")
+    print("Creating smooth live caption clips...")
     
     # Parse all individual words with their timing
     word_events = []
@@ -57,7 +57,6 @@ def create_rolling_word_clips(word_subtitles, video, font_size, font, color, hig
         start_time = subtitle.start.total_seconds()
         end_time = subtitle.end.total_seconds()
         
-        # Each subtitle contains just one word
         word = subtitle.content.strip()
         if word:
             word_events.append({
@@ -72,63 +71,93 @@ def create_rolling_word_clips(word_subtitles, video, font_size, font, color, hig
     # Sort by start time
     word_events.sort(key=lambda x: x['start'])
     
-    # Create non-overlapping sequential clips
+    # Create smooth caption segments
     clips = []
     word_window = []
     last_word_end = 0
     
-    for i, event in enumerate(word_events):
-        print(f"Processing word {i+1}/{len(word_events)}: {event['word']}")
+    # Group words into smooth segments to reduce clip count
+    i = 0
+    while i < len(word_events):
+        segment_start = word_events[i]['start']
+        segment_words = []
+        segment_timings = []
         
-        # Check if there's a pause > 1 second since last word
-        if last_word_end > 0 and (event['start'] - last_word_end) > 1.0:
-            print(f"  Gap detected: {event['start'] - last_word_end:.2f}s - clearing window")
-            word_window = []  # Clear the rolling window
-        
-        # Add new word to rolling window
-        word_window.append(event['word'])
-        
-        # Remove oldest word if window exceeds 4 words
-        if len(word_window) > 4:
-            word_window.pop(0)
-        
-        # Update last word end time for gap detection
-        last_word_end = event['end']
-        
-        # Create display text from current window
-        display_text = ' '.join(word_window)
-        
-        # Calculate precise timing to avoid overlap
-        start_time = event['start']
-        
-        # End exactly when the next word starts, or at the end of this word
-        if i < len(word_events) - 1:
-            next_start = word_events[i + 1]['start']
-            end_time = min(next_start, event['end'])
-        else:
-            end_time = event['end']
-        
-        duration = max(0.1, end_time - start_time)  # Ensure minimum duration
-        
-        try:
-            # Create clip that ends before next one starts
-            txt_clip = TextClip(
-                text=display_text,
-                font_size=font_size,
-                color=color,
-                bg_color="#000000CC",
-                margin=(10,10),
-                font=font,
-                method='label'
-            ).with_position(('center', original_height - bottom_padding)).with_start(start_time).with_duration(duration)
+        # Collect words for this segment (until gap > 1s or significant timing change)
+        j = i
+        while j < len(word_events):
+            event = word_events[j]
             
-            clips.append(txt_clip)
+            # Check for pause > 1 second
+            if last_word_end > 0 and (event['start'] - last_word_end) > 1.0:
+                print(f"  Gap detected: {event['start'] - last_word_end:.2f}s - starting new segment")
+                word_window = []  # Clear window on gap
             
-        except Exception as e:
-            print(f"Error creating word clip: {e}")
-            continue
+            # Add word to current segment
+            word_window.append(event['word'])
+            if len(word_window) > 4:
+                word_window.pop(0)
+            
+            segment_words.append(' '.join(word_window))
+            segment_timings.append(event['start'])
+            last_word_end = event['end']
+            
+            # Break segment if:
+            # 1. Next word has > 0.5s gap (for smoother transitions)
+            # 2. We've collected enough words for smooth playback
+            # 3. We've reached the end of words
+            if (j + 1 < len(word_events) and 
+                word_events[j + 1]['start'] - event['end'] > 0.5) or \
+               (j - i + 1) >= 8:  # Max 8 words per segment
+                break
+                
+            j += 1
+        
+        # Create smooth segment with multiple state changes
+        if segment_words:
+            # Ensure j is within bounds
+            if j >= len(word_events):
+                j = len(word_events) - 1
+            
+            segment_end = word_events[j]['end']
+            total_duration = segment_end - segment_start
+            
+            # Create individual clips for each word state in this segment
+            for k, (display_text, word_start) in enumerate(zip(segment_words, segment_timings)):
+                try:
+                    # Calculate duration for this word state
+                    if k < len(segment_timings) - 1:
+                        word_duration = segment_timings[k + 1] - word_start
+                    else:
+                        word_duration = segment_end - word_start
+                    
+                    # Ensure minimum duration for readability
+                    word_duration = max(0.15, word_duration)
+                    
+                    # Skip if duration is invalid
+                    if word_duration <= 0:
+                        continue
+                    
+                    txt_clip = TextClip(
+                        text=display_text,
+                        font_size=font_size,
+                        color=color,
+                        bg_color="#000000CC",
+                        margin=(8,8),  # Smaller margin for smoother look
+                        font=font,
+                        method='label'
+                    ).with_position(('center', original_height - bottom_padding)).with_start(word_start).with_duration(word_duration)
+                    
+                    clips.append(txt_clip)
+                    print(f"  Word state: '{display_text}' at {word_start:.2f}s for {word_duration:.2f}s")
+                    
+                except Exception as e:
+                    print(f"Error creating word state clip: {e}")
+                    continue
+        
+        i = j + 1
     
-    print(f"Created {len(clips)} sequential non-overlapping clips")
+    print(f"Created {len(clips)} smooth caption clips")
     return clips
 
 def overlay_subtitles(video_path, srt_path, output_path, font_size=28, font='/Users/dev/Desktop/CODE/live-transcription-app/Bangers-Regular.ttf', color='white', bottom_padding=100, highlight_color='yellow'):

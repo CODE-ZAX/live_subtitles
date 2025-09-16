@@ -1,7 +1,33 @@
-numpy
-opencv-python
-pydub
-SpeechRecognition
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.5.0
+pydub>=0.25.0
+SpeechRecognition>=3.8.0
 moviepy>=2.0.0
-srt
-openai-whisper
+srt>=3.5.0
+openai-whisper>=20231117
+
+# GUI dependencies
+customtkinter>=5.2.0
+Pillow>=9.0.0
+tkinter-tooltip>=2.0.0
+
+# Audio/Video processing
+imageio>=2.25.0
+imageio-ffmpeg>=0.4.8
+
+# System utilities
+python-dotenv>=0.19.0
+packaging>=21.0
+
+# Windows-specific dependencies (installed conditionally)
+pywin32>=227; sys_platform == "win32"
+winshell>=0.6; sys_platform == "win32"
+
+# Development and build tools
+setuptools>=60.0.0
+wheel>=0.37.0
+
+# Optional but recommended
+requests>=2.25.0
+certifi>=2021.5.25
