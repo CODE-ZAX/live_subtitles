@@ -26,9 +26,114 @@ def format_time(seconds):
     seconds = int(seconds % 60)
     return f"{hours:02}:{minutes:02}:{seconds:02},000"
 
+def create_dynamic_text_function(word_events):
+    """Create a function that returns text based on time"""
+    def text_at_time(t):
+        word_window = []
+        
+        # Find all words that should be visible at time t
+        for event in word_events:
+            if event['start'] <= t:
+                word_window.append(event['word'])
+                # Keep only last 4 words
+                if len(word_window) > 4:
+                    word_window.pop(0)
+            else:
+                break
+        
+        return ' '.join(word_window) if word_window else ""
+    
+    return text_at_time
+
+def create_rolling_word_clips(word_subtitles, video, font_size, font, color, highlight_color, bottom_padding, original_width, original_height):
+    """
+    Create a single dynamic text clip with no overlaps
+    """
+    print("Creating live rolling word clip...")
+    
+    # Parse all individual words with their timing
+    word_events = []
+    for subtitle in word_subtitles:
+        start_time = subtitle.start.total_seconds()
+        end_time = subtitle.end.total_seconds()
+        
+        # Each subtitle contains just one word
+        word = subtitle.content.strip()
+        if word:
+            word_events.append({
+                'start': start_time,
+                'end': end_time,
+                'word': word
+            })
+    
+    if not word_events:
+        return []
+    
+    # Sort by start time
+    word_events.sort(key=lambda x: x['start'])
+    
+    # Create non-overlapping sequential clips
+    clips = []
+    word_window = []
+    last_word_end = 0
+    
+    for i, event in enumerate(word_events):
+        print(f"Processing word {i+1}/{len(word_events)}: {event['word']}")
+        
+        # Check if there's a pause > 1 second since last word
+        if last_word_end > 0 and (event['start'] - last_word_end) > 1.0:
+            print(f"  Gap detected: {event['start'] - last_word_end:.2f}s - clearing window")
+            word_window = []  # Clear the rolling window
+        
+        # Add new word to rolling window
+        word_window.append(event['word'])
+        
+        # Remove oldest word if window exceeds 4 words
+        if len(word_window) > 4:
+            word_window.pop(0)
+        
+        # Update last word end time for gap detection
+        last_word_end = event['end']
+        
+        # Create display text from current window
+        display_text = ' '.join(word_window)
+        
+        # Calculate precise timing to avoid overlap
+        start_time = event['start']
+        
+        # End exactly when the next word starts, or at the end of this word
+        if i < len(word_events) - 1:
+            next_start = word_events[i + 1]['start']
+            end_time = min(next_start, event['end'])
+        else:
+            end_time = event['end']
+        
+        duration = max(0.1, end_time - start_time)  # Ensure minimum duration
+        
+        try:
+            # Create clip that ends before next one starts
+            txt_clip = TextClip(
+                text=display_text,
+                font_size=font_size,
+                color=color,
+                bg_color="#000000CC",
+                margin=(10,10),
+                font=font,
+                method='label'
+            ).with_position(('center', original_height - bottom_padding)).with_start(start_time).with_duration(duration)
+            
+            clips.append(txt_clip)
+            
+        except Exception as e:
+            print(f"Error creating word clip: {e}")
+            continue
+    
+    print(f"Created {len(clips)} sequential non-overlapping clips")
+    return clips
+
 def overlay_subtitles(video_path, srt_path, output_path, font_size=28, font='/Users/dev/Desktop/CODE/live-transcription-app/Bangers-Regular.ttf', color='white', bottom_padding=100, highlight_color='yellow'):
     """
-    Overlay subtitles onto video with proper aspect ratio preservation
+    Overlay subtitles onto video with rolling word window system
     """
     print("Loading video...")
     video = VideoFileClip(video_path)
@@ -43,64 +148,64 @@ def overlay_subtitles(video_path, srt_path, output_path, font_size=28, font='/Us
     subtitles = list(srt.parse(srt_content))
     print(f"Found {len(subtitles)} subtitles")
     
+    # In word mode, all subtitles are individual words
+    # In line mode, subtitles are complete sentences
+    # For now, assume all subtitles are word mode (individual words)
+    word_mode_subtitles = []
+    line_mode_subtitles = []
+    
+    for subtitle in subtitles:
+        if not subtitle.content.strip():
+            continue
+        
+        # Check if it's a single word (word mode) or multiple words (line mode)
+        words_in_subtitle = subtitle.content.strip().split()
+        if len(words_in_subtitle) == 1:
+            word_mode_subtitles.append(subtitle)
+        else:
+            line_mode_subtitles.append(subtitle)
+    
+    print(f"Word mode: {len(word_mode_subtitles)}, Line mode: {len(line_mode_subtitles)}")
+    
     # Create subtitle clips
     subtitle_clips = []
     
-    for i, subtitle in enumerate(subtitles):
-        if not subtitle.content.strip():
-            continue
-            
-        print(f"Processing subtitle {i+1}/{len(subtitles)}: {subtitle.content[:30]}...")
-        
-        # Use exact timing from SRT subtitles - no adjustments
-        start_time = subtitle.start.total_seconds()
-        end_time = subtitle.end.total_seconds()
-        duration = end_time - start_time
-        
-        # Clean text and handle highlighting
-        text = subtitle.content.strip()
-        
-        # Check if this is word mode (has *** markers) or line mode
-        is_word_mode = '***' in text
-        
-        if is_word_mode:
-            # Word mode: Display last 3-4 words with current word highlighted
-            clean_text = text.replace('***', '')
-            text_color = highlight_color
-        else:
-            # Line mode: Display full line with proper wrapping
-            clean_text = text
-            text_color = color
-        
-        # Create text clip with proper sizing based on mode
+    # Handle word mode with rolling window
+    if word_mode_subtitles:
+        word_clips = create_rolling_word_clips(
+            word_mode_subtitles, 
+            video, 
+            font_size, 
+            font, 
+            color, 
+            color,  # Use same color for word mode
+            bottom_padding, 
+            original_width, 
+            original_height
+        )
+        subtitle_clips.extend(word_clips)
+    
+    # Handle line mode normally
+    for subtitle in line_mode_subtitles:
         try:
-            if is_word_mode:
-                # Word mode: Simple display without wrapping
-                txt_clip = TextClip(
-                    text=clean_text,
-                    font_size=font_size,
-                    color=text_color,
-                    bg_color="#000000CC",
-                    margin=(10,10),
-                    font=font,
-                    method='label'
-                ).with_position(('center', original_height - bottom_padding)).with_start(start_time).with_duration(duration)
-            else:
-                # Line mode: Enable text wrapping with screen width constraint
-                max_width = int(original_width * 0.85)  # Use 85% of screen width
-                txt_clip = TextClip(
-                    text=clean_text,
-                    font_size=font_size,
-                    color=text_color,
-                    font=font,
-                    method='label',
-                    size=(max_width, None)  # Enable wrapping
-                ).with_position(('center', original_height - bottom_padding)).with_start(start_time).with_duration(duration)
+            start_time = subtitle.start.total_seconds()
+            end_time = subtitle.end.total_seconds()
+            duration = end_time - start_time
+            
+            max_width = int(original_width * 0.85)
+            txt_clip = TextClip(
+                text=subtitle.content.strip(),
+                font_size=font_size,
+                color=color,
+                font=font,
+                method='label',
+                size=(max_width, None)
+            ).with_position(('center', original_height - bottom_padding)).with_start(start_time).with_duration(duration)
             
             subtitle_clips.append(txt_clip)
             
         except Exception as e:
-            print(f"Error creating text clip for subtitle {i+1}: {e} || {font}")
+            print(f"Error creating line mode clip: {e}")
             continue
     
     print(f"Created {len(subtitle_clips)} subtitle clips")

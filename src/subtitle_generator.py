@@ -8,13 +8,11 @@ class SubtitleGenerator:
             word_count = 0
             
             if word_mode:
-                # Word-by-word mode with highlighting
-                word_buffer = []  # Buffer to keep track of last 3 words
-                
+                # Word-by-word mode - individual words only
                 for segment in segments:
                     # Check if segment has word-level timestamps
                     if 'words' in segment and segment['words']:
-                        # Generate rolling word subtitles with highlighting
+                        # Generate individual word subtitles
                         for word_info in segment['words']:
                             word = word_info['word'].strip()
                             if word:  # Only process non-empty words
@@ -22,26 +20,13 @@ class SubtitleGenerator:
                                 # Keep original word timing but ensure minimum duration
                                 end_time = max(start_time + 0.5, word_info['end'])
                                 
-                                # Add current word to buffer
-                                word_buffer.append({
-                                    'word': word,
-                                    'start': start_time,
-                                    'end': end_time
-                                })
-                                
-                                # Keep only last 3 words
-                                if len(word_buffer) > 3:
-                                    word_buffer.pop(0)
-                                
-                                # Create subtitle with last 3 words, highlighting current
-                                subtitle_text = self.create_highlighted_subtitle(word_buffer)
-                                
                                 start_formatted = self.format_time(start_time)
                                 end_formatted = self.format_time(end_time)
                                 
+                                # Write individual word (no highlighting markers)
                                 f.write(f"{subtitle_index}\n")
                                 f.write(f"{start_formatted} --> {end_formatted}\n")
-                                f.write(f"{subtitle_text}\n\n")
+                                f.write(f"{word}\n\n")
                                 subtitle_index += 1
                                 word_count += 1
                     else:
