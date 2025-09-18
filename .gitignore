@@ -11,3 +11,5 @@ __pycache__
 
 
 *.srt
+frontend/node_modules
+frontend/build

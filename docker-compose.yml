@@ -1,0 +1,34 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - whisper_models:/root/.cache/whisper
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - WHISPER_CACHE_DIR=/root/.cache/whisper
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  whisper_models:
+
+  # Optional: Add Redis for production task management
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis_data:/data
+# volumes:
+#   redis_data:
