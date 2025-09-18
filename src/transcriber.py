@@ -16,7 +16,7 @@ class Transcriber:
         video.audio.write_audiofile(audio_path)
 
         # Load Whisper model and transcribe with word-level timestamps
-        model = whisper.load_model("turbo")
+        model = whisper.load_model("base")
         result = model.transcribe(audio_path, verbose=False, word_timestamps=True)
         self.transcribed_segments = result['segments']
 

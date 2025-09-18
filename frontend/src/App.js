@@ -19,6 +19,7 @@ function App() {
   const [taskId, setTaskId] = useState(null);
   const [processingStatus, setProcessingStatus] = useState(null);
   const [wsConnection, setWsConnection] = useState(null);
+  const [pollingInterval, setPollingInterval] = useState(null);
   const [styleOptions, setStyleOptions] = useState({
     font_size: 28,
     font_family: "Bangers-Regular.ttf",
@@ -40,6 +41,58 @@ function App() {
       setAvailableStyles(styles);
     } catch (error) {
       console.error("Error loading style options:", error);
+    }
+  };
+
+  const startPolling = (taskId) => {
+    console.log("Starting polling for task:", taskId);
+    const interval = setInterval(async () => {
+      try {
+        const status = await getStatus(taskId);
+        console.log("Polling status update:", status);
+
+        if (status.status === "completed" || status.status === "error") {
+          console.log("Task completed via polling, stopping poller");
+          clearInterval(interval);
+          setPollingInterval(null);
+
+          setProcessingStatus({
+            status: status.status,
+            progress: status.progress,
+            message: status.message,
+            step: status.step || 4,
+            step_name: status.step_name || "Finalizing",
+          });
+
+          if (status.status === "completed") {
+            setCurrentStep("completed");
+          } else if (status.status === "error") {
+            setCurrentStep("error");
+          }
+        } else {
+          // Update progress from polling if WebSocket missed it
+          setProcessingStatus((prev) => ({
+            ...prev,
+            status: status.status,
+            progress: status.progress,
+            message: status.message,
+            step: status.step || prev?.step || 0,
+            step_name: status.step_name || prev?.step_name || "Processing",
+          }));
+        }
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    setPollingInterval(interval);
+  };
+
+  const stopPolling = () => {
+    if (pollingInterval) {
+      console.log("Stopping polling");
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
     }
   };
 
@@ -101,8 +154,10 @@ function App() {
 
             if (data.status === "completed") {
               setCurrentStep("completed");
+              stopPolling(); // Stop polling since we got completion via WebSocket
             } else if (data.status === "error") {
               setCurrentStep("error");
+              stopPolling(); // Stop polling since we got error via WebSocket
             }
           } else if (data.type === "connected") {
             console.log("WebSocket connection confirmed");
@@ -139,6 +194,9 @@ function App() {
         );
       }
 
+      // Start polling as a fallback
+      startPolling(response.task_id);
+
       setProcessingStatus({
         status: "processing",
         progress: 0,
@@ -149,6 +207,7 @@ function App() {
     } catch (error) {
       console.error("Upload error:", error);
       setCurrentStep("error");
+      stopPolling();
       if (wsConnection) {
         wsConnection.close();
         setWsConnection(null);
@@ -182,6 +241,9 @@ function App() {
     setTaskId(null);
     setProcessingStatus(null);
 
+    // Stop polling
+    stopPolling();
+
     // Close WebSocket connection
     if (wsConnection) {
       wsConnection.close();
@@ -189,9 +251,10 @@ function App() {
     }
   };
 
-  // Cleanup WebSocket on unmount
+  // Cleanup WebSocket and polling on unmount
   useEffect(() => {
     return () => {
+      stopPolling();
       if (wsConnection) {
         wsConnection.close();
       }
